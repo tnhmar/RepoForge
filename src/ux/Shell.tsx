@@ -1,17 +1,50 @@
-import { useState, type ReactNode } from 'react';
-import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
-import { Linking, Modal, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
-import { Avatar, Text, useTheme } from 'react-native-paper';
+import { useMemo, type ReactNode } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { usePathname, useRouter } from 'expo-router';
 import { useSession } from '../auth';
-import { Icon, type IconName } from '../components/ui';
-type Destination = '/repositories' | '/workbench' | '/activity' | '/settings' | '/new-repository' | '/import';
-const destinations: { path: Destination; label: string; icon: IconName }[] = [{ path: '/repositories', label: 'Repositories', icon: 'repo' }, { path: '/workbench', label: 'Repository tools', icon: 'branch' }, { path: '/activity', label: 'Uploads', icon: 'upload' }, { path: '/settings', label: 'Settings', icon: 'settings' }];
+import { Icon } from '../components/ui';
+import { MobileTabBar } from './MobileTabBar';
+
+const titles: Record<string, string> = {
+  '/': 'Home',
+  '/repositories': 'Repositories',
+  '/activity': 'Activity',
+  '/workbench': 'Work',
+  '/settings': 'Account',
+  '/new-repository': 'Create repository',
+  '/import': 'Import project',
+  '/connect': 'Repository access',
+};
+
 export function AppShell({ children }: { children: ReactNode }) {
-  const user = useSession((s) => s.user); const theme = useTheme(); const router = useRouter(); const pathname = usePathname(); const params = useGlobalSearchParams<{ name?: string }>(); const { width } = useWindowDimensions(); const [menu, setMenu] = useState<'navigation' | 'account' | null>(null); const wide = width >= 1100;
-  const title = pathname.startsWith('/repository/') ? params.name || 'Repository' : pathname === '/connect' ? 'Repository access' : pathname === '/new-repository' ? 'New repository' : destinations.find((item) => item.path === pathname)?.label || 'RepoForge';
-  const go = (path: Destination) => { setMenu(null); router.navigate(path); };
-  const button = (label: string, icon: IconName, action: () => void, selected = false) => <Pressable key={label} accessibilityRole='button' accessibilityLabel={label} accessibilityState={{ selected }} onPress={action} style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', minHeight: 46, paddingHorizontal: 12, gap: 12, borderRadius: 6, backgroundColor: selected || pressed ? theme.colors.surfaceVariant : 'transparent' })}><Icon name={icon} size={19} /><Text style={{ color: theme.colors.onSurface }}>{label}</Text></Pressable>;
-  const navigation = <><Text variant='titleMedium' style={{ padding: 12 }}>RepoForge</Text>{destinations.map((item) => button(item.label, item.icon, () => go(item.path), pathname === item.path))}{button('New repository', 'plus', () => go('/new-repository'))}{button('GitHub notifications ↗', 'activity', () => { setMenu(null); void Linking.openURL('https://github.com/notifications').catch(() => {}); })}</>;
-  return <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: theme.colors.background }}>{user ? <View style={{ height: 58, paddingHorizontal: 8, gap: 8, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: theme.colors.outlineVariant, backgroundColor: theme.colors.surfaceVariant }}>{!wide ? <Pressable accessibilityRole='button' accessibilityLabel='Open navigation' onPress={() => setMenu('navigation')} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}><Icon name='menu' /></Pressable> : null}<Pressable accessibilityRole='button' accessibilityLabel='Repositories' onPress={() => go('/repositories')} style={{ padding: 8 }}><Icon name='branch' size={24} color={theme.colors.onSurface} /></Pressable><Text numberOfLines={1} style={{ flex: 1, color: theme.colors.onSurface, fontWeight: '600' }}>{title}</Text><Pressable accessibilityRole='button' accessibilityLabel='Find repository' onPress={() => router.navigate({ pathname: '/repositories', params: { focus: '1' } })} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}><Icon name='search' /></Pressable><Pressable accessibilityRole='button' accessibilityLabel={`Account ${user.login}`} onPress={() => setMenu('account')} style={{ padding: 6 }}><Avatar.Text size={30} label={user.login.slice(0, 1).toUpperCase()} /></Pressable></View> : null}<View style={{ flex: 1, flexDirection: 'row' }}>{user && wide ? <ScrollView style={{ width: 230, maxWidth: 230, borderRightWidth: 1, borderRightColor: theme.colors.outlineVariant }} contentContainerStyle={{ padding: 12 }}>{navigation}</ScrollView> : null}<View style={{ flex: 1 }}>{children}</View></View><Modal transparent visible={!!menu && !!user} animationType='fade' onRequestClose={() => setMenu(null)}><View style={{ flex: 1 }}><Pressable accessibilityRole='button' accessibilityLabel='Close menu' onPress={() => setMenu(null)} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)' }} /><SafeAreaView edges={['top', 'bottom']} style={{ backgroundColor: theme.colors.surface, width: menu === 'account' ? Math.min(width - 32, 300) : Math.min(width - 48, 320), alignSelf: menu === 'account' ? 'flex-end' : 'flex-start', ...(menu === 'account' ? { marginTop: 52, marginRight: 8, borderRadius: 8 } : { flex: 1 }) }}><ScrollView contentContainerStyle={{ padding: 12 }}>{menu === 'navigation' ? navigation : <><Text variant='titleMedium' style={{ padding: 12 }}>@{user?.login}</Text>{button('Settings', 'settings', () => go('/settings'))}{button('Repository access', 'repo', () => { setMenu(null); router.navigate({ pathname: '/connect', params: { manage: '1' } }); })}{button('Uploads', 'upload', () => go('/activity'))}</>}</ScrollView></SafeAreaView></View></Modal></SafeAreaView>;
+  const user = useSession((s) => s.user);
+  const pathname = usePathname();
+  const router = useRouter();
+  const theme = useTheme();
+  const isRepository = pathname.startsWith('/repository/');
+  const fullScreen = pathname === '/sign-in' || pathname === '/oauth';
+  const title = useMemo(() => {
+    if (isRepository) return 'Repository';
+    return titles[pathname] || 'RepoForge';
+  }, [pathname, isRepository]);
+  const showBack = pathname === '/new-repository' || pathname === '/import' || pathname === '/connect';
+  const showSearch = pathname === '/' || pathname === '/repositories' || pathname === '/workbench';
+
+  if (!user || fullScreen) return <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={{ flex: 1, backgroundColor: theme.colors.background }}>{children}</SafeAreaView>;
+
+  return <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    {!isRepository ? <View style={{ minHeight: 58, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.outlineVariant, backgroundColor: theme.colors.background }}>
+      {showBack ? <Pressable accessibilityRole='button' accessibilityLabel='Back' onPress={() => router.back()} style={styles.headerButton}><Icon name='back' /></Pressable> : null}
+      {!showBack ? <View style={{ width: 42 }} /> : null}
+      <Text variant='titleMedium' style={{ flex: 1, fontWeight: '700' }}>{title}</Text>
+      {showSearch ? <Pressable accessibilityRole='button' accessibilityLabel='Search repositories' onPress={() => router.navigate({ pathname: '/repositories', params: { focus: '1' } })} style={styles.headerButton}><Icon name='search' /></Pressable> : null}
+      <Pressable accessibilityRole='button' accessibilityLabel='GitHub profile' onPress={() => router.navigate('/settings')} style={styles.headerButton}><Icon name='person' /></Pressable>
+    </View> : null}
+    <View style={{ flex: 1 }}>{children}</View>
+    {!isRepository && !showBack ? <MobileTabBar /> : null}
+  </SafeAreaView>;
 }
+
+const styles = StyleSheet.create({ headerButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' } });

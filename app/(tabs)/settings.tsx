@@ -1,2 +1,1 @@
-import { Redirect } from 'expo-router';
-export default function SettingsAlias() { return <Redirect href='/account' />; }
+export { AccountScreen as default } from '../../src/screens/Account';
