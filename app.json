@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "RepoForge",
+    "slug": "repoforge",
+    "scheme": "repoforge",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/generated/icon.png",
+    "ios": { "bundleIdentifier": "com.tnhmar.repoforge", "supportsTablet": true },
+    "android": {
+      "package": "com.tnhmar.repoforge",
+      "adaptiveIcon": { "foregroundImage": "./assets/generated/adaptive-icon.png", "backgroundColor": "#10251F" }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-localization",
+      ["expo-splash-screen", { "image": "./assets/generated/splash.png", "imageWidth": 180, "backgroundColor": "#10251F" }]
+    ]
+  }
+}
