@@ -30,7 +30,10 @@ export function PublicationNotifier() {
   useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data;
-      if (data.destination === 'activity' && data.userId === useSession.getState().user?.id) router.navigate('/activity');
+      const currentUserId = useSession.getState().user?.id;
+      if (data && typeof currentUserId === 'number' && data.destination === 'activity' && data.userId === currentUserId) {
+        router.navigate('/activity');
+      }
     });
     return () => subscription.remove();
   }, [router]);
