@@ -3,7 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Linking, ScrollView, View } from 'react-native';
 import { ActivityIndicator, Button, Checkbox, Chip, Dialog, Portal, Text, TextInput } from 'react-native-paper';
 import { useSession } from '../auth';
-import { api, enc, repoPath } from '../github';
+import { api, repoPath } from '../github';
 import { useRepositoryIndex } from '../ux/repositoryIndex';
 import type { Repo } from '../github';
 import { Heading, Icon, Notice, Page, Panel, Row, styles } from '../components/ui';
@@ -41,7 +41,7 @@ export function RepositoryEntry() { const { name } = useLocalSearchParams<{ name
 export function RepositoryToolsSection({ full, section }: { full: string; section: 'Issues' | 'Pull requests' | 'Actions' | 'Releases' | 'Alerts' }) { const user = useSession((s) => s.user); return <WriteProvider key={`${user?.id}:${full}:${section}`}>{section === 'Alerts' ? <AlertSettings /> : validRepository(full) ? <>{section === 'Issues' ? <Threads full={full} kind='issues' /> : section === 'Pull requests' ? <Threads full={full} kind='pulls' /> : section === 'Actions' ? <Actions full={full} /> : <Releases full={full} />}</> : <Notice>Repository name is not valid.</Notice>}</WriteProvider>; }
 export function WorkbenchScreen() {
   const params = useLocalSearchParams<{ repo?: string }>(); const router = useRouter(); const user = useSession((s) => s.user); const repoIndex = useRepositoryIndex(); const [query, setQuery] = useState(params.repo || '');
-  useEffect(() => { if (params.repo && validRepository(params.repo)) router.replace({ pathname: '/repository/[name]', params: { name: params.repo } }); }, [params.repo]);
+  useEffect(() => { if (params.repo && validRepository(params.repo)) router.replace({ pathname: '/repository/[name]', params: { name: params.repo } }); }, [params.repo, router]);
   if (!user) return <Page><Heading eyebrow='Work' title='Connect GitHub first' /><Text style={{ color: '#667085' }}>Work is where you jump into collaboration workflows across repositories.</Text><Button mode='contained' onPress={() => router.navigate('/sign-in')}>Sign in</Button></Page>;
   const recent = [...repoIndex.rows].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 6);
   const matches = recent.filter((repo) => `${repo.fullName} ${repo.description}`.toLowerCase().includes(query.trim().toLowerCase()));
