@@ -1,18 +1,22 @@
 import { Inflate, strFromU8, strToU8 } from 'fflate';
 import { safePath } from './logic/importPlan';
-export const ZIP_LIMIT = 20 * 1024 * 1024;
+export const ZIP_LIMIT = 250 * 1024 * 1024;
+export const EXTRACTED_LIMIT = 500 * 1024 * 1024;
+export const FILE_LIMIT = 100 * 1024 * 1024;
+export const FILE_COUNT_LIMIT = 10_000;
+export const EXPANSION_RATIO_LIMIT = 200;
 export type ProjectFile = { path: string; data: Uint8Array; mode: '100644' | '100755' };
 const fail = (message: string): never => { throw new Error(message); };
 export function crc32(bytes: Uint8Array) { let crc = -1; for (const byte of bytes) { crc ^= byte; for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ ((crc & 1) ? 0xEDB88320 : 0); } return (crc ^ -1) >>> 0; }
 export async function readZip(data: Uint8Array): Promise<ProjectFile[]> {
-  if (data.length < 22 || data.length > ZIP_LIMIT) fail('ZIP must be between 22 bytes and 20 MiB.');
+  if (data.length < 22 || data.length > ZIP_LIMIT) fail('ZIP must be between 22 bytes and 250 MiB.');
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const u16 = (at: number) => view.getUint16(at, true); const u32 = (at: number) => view.getUint32(at, true);
   let end = -1;
   for (let i = data.length - 22; i >= Math.max(0, data.length - 65557); i -= 1) if (u32(i) === 0x06054B50 && i + 22 + u16(i + 20) === data.length) { end = i; break; }
   if (end < 0) fail('Invalid ZIP end record.');
   const count = u16(end + 10); const start = u32(end + 16); const size = u32(end + 12);
-  if (u16(end + 4) || u16(end + 6) || u16(end + 8) !== count || count === 65535 || count > 1000 || start + size !== end) fail('Split, ZIP64, or oversized ZIP directories are unsupported.');
+  if (u16(end + 4) || u16(end + 6) || u16(end + 8) !== count || count === 65535 || count > FILE_COUNT_LIMIT || start + size !== end) fail('Split, ZIP64, or oversized ZIP directories are unsupported.');
   const records: { path: string; offset: number; compressed: number; bytes: number; crc: number; method: number; flags: number; mode: '100644' | '100755'; directory: boolean; rawName: Uint8Array }[] = [];
   const seen = new Set<string>(); let total = 0; let cursor = start;
   for (let i = 0; i < count; i += 1) {
@@ -29,13 +33,13 @@ export async function readZip(data: Uint8Array): Promise<ProjectFile[]> {
     const folded = path.normalize('NFC').toLowerCase(); if (seen.has(folded)) fail('Duplicate or case-colliding archive entry.'); seen.add(folded);
     const unix = (u32(cursor + 38) >>> 16); const kind = unix & 0o170000;
     if (kind && kind !== (directory ? 0o040000 : 0o100000)) fail('Symlinks and special files are unsupported.');
-    if (bytes > 5 * 1024 * 1024 || bytes > Math.max(1, compressed) * 200 || (directory && bytes !== 0)) fail('Entry exceeds file-size or expansion-ratio limits.');
-    total += bytes; if (total > 50 * 1024 * 1024) fail('Extracted project exceeds 50 MiB.');
+    if (bytes > FILE_LIMIT || bytes > Math.max(1, compressed) * EXPANSION_RATIO_LIMIT || (directory && bytes !== 0)) fail('Entry exceeds file-size or expansion-ratio limits.');
+    total += bytes; if (total > EXTRACTED_LIMIT) fail('Extracted project exceeds 50 MiB.');
     for (let p = cursor + 46 + nameLength; p < cursor + 46 + nameLength + extraLength;) { if (p + 4 > cursor + 46 + nameLength + extraLength) fail('Invalid extra field.'); const length = u16(p + 2); if (u16(p) === 1 || p + 4 + length > cursor + 46 + nameLength + extraLength) fail('ZIP64 or invalid extra field.'); p += 4 + length; }
     records.push({ path, offset, compressed, bytes, crc: u32(cursor + 16), method, flags, mode: unix & 0o111 ? '100755' : '100644', directory, rawName });
     cursor += 46 + nameLength + extraLength + commentLength;
   }
-  if (cursor !== end || records.filter((r) => !r.directory).length > 300) fail('ZIP directory mismatch or more than 300 files.');
+  if (cursor !== end || records.filter((r) => !r.directory).length > FILE_COUNT_LIMIT) fail('ZIP directory mismatch or more than 300 files.');
   const ranges: [number, number][] = []; const files: ProjectFile[] = [];
   for (const record of records) {
     const p = record.offset;

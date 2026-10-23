@@ -10,7 +10,7 @@ import { authorizationBody, CALLBACK_URI, parseTokenPair, refreshBody, TOKEN_END
 const settings = Constants.expoConfig?.extra?.githubAuth as Record<string, unknown> | undefined;
 export const clientId = typeof settings?.clientId === 'string' ? settings.clientId : '';
 export const appSlug = typeof settings?.appSlug === 'string' ? settings.appSlug : '';
-// Public-client value: deliberately distributed in the APK, never a confidential app identity.
+// Native/public-client value: this is necessarily extractable from the APK. PKCE protects the authorization-code flow; the secret is not treated as a server-side secret.
 const clientSecret = typeof settings?.clientSecret === 'string' ? settings.clientSecret : '';
 const config = { clientId, clientSecret };
 const key = 'repoforge.github.session.v2';
@@ -29,7 +29,7 @@ function storage<T>(operation: () => Promise<T>): Promise<T> {
   return result;
 }
 export function configured() { return !!clientId && !!clientSecret && /^[A-Za-z0-9-]+$/.test(appSlug); }
-function requireConfig() { if (!configured()) throw new Error('This APK is not configured for GitHub sign-in. The developer must set the app registration values and rebuild. No server or end-user token setup is needed.'); }
+function requireConfig() { if (!clientId || !/^[A-Za-z0-9-]+$/.test(appSlug)) throw new Error('This APK is missing the GitHub App client ID or app slug. Configure the public app registration values and rebuild.'); if (!clientSecret) throw new Error('This APK is missing the GitHub App client secret required by GitHub for authorization-code and refresh-token exchange. Configure it at build time and rebuild.'); }
 async function readSession(): Promise<SavedSession | null> {
   return storage(async () => {
     const raw = await SecureStore.getItemAsync(key); if (!raw) return null;
