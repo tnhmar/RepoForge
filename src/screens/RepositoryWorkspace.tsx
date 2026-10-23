@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Dialog, Portal, Text, TextInput, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Button, Dialog, Portal, Text, useTheme } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { fromByteArray, toByteArray } from 'base64-js';
 import { strFromU8, strToU8 } from 'fflate';
@@ -13,7 +13,7 @@ import { useRepositoryIndex } from '../ux/repositoryIndex';
 function useLoad<T>(loader: () => Promise<T>) {
   const [state, setState] = useState<{ data?: T; error?: string; busy: boolean }>({ busy: true });
   const [version, setVersion] = useState(0);
-  useEffect(() => { let active = true; setState((s) => ({ ...s, busy: true, error: undefined })); void loader().then((data) => { if (active) setState({ data, busy: false }); }).catch((error) => { if (active) setState({ error: error instanceof Error ? error.message : 'Request failed.', busy: false }); }); return () => { active = false; }; }, [loader, version]);
+  useEffect(() => { let active = true; void Promise.resolve().then(() => { if (active) setState((s) => ({ ...s, busy: true, error: undefined })); return loader(); }).then((data) => { if (active) setState({ data, busy: false }); }).catch((error) => { if (active) setState({ error: error instanceof Error ? error.message : 'Request failed.', busy: false }); }); return () => { active = false; }; }, [loader, version]);
   return { ...state, reload: () => setVersion((v) => v + 1) };
 }
 

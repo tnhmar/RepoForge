@@ -17,7 +17,7 @@ export function HomeScreen() {
 
   useEffect(() => {
     if (user && (!index.attempted || index.userId !== user.id)) void refreshRepositories();
-  }, [user?.id, index.attempted, index.userId]);
+  }, [user, index.attempted, index.userId]);
 
   const recent = useMemo(() => [...index.rows].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 4), [index.rows]);
   const unfinished = jobs.filter((j) => j.status === 'started' || j.status === 'unknown' || j.status === 'failed').slice(0, 2);

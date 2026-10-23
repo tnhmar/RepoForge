@@ -1,13 +1,13 @@
-import { Linking, Pressable, View } from 'react-native';
+import { Linking, View } from 'react-native';
 import { Button, Text, useTheme } from 'react-native-paper';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useSession } from '../auth';
 import { useJobs } from '../liveStore';
 import { Empty, InlineError } from '../ux/primitives';
 import { Icon, Page, Panel } from '../components/ui';
 
 export function ActivityScreen() {
-  const user = useSession((s) => s.user); const jobs = useJobs((s) => s.jobs).filter((j) => j.userId === user?.id); const { job: selected } = useLocalSearchParams<{ job?: string }>(); const router = useRouter(); const theme = useTheme();
+  const user = useSession((s) => s.user); const jobs = useJobs((s) => s.jobs).filter((j) => j.userId === user?.id); const router = useRouter(); const theme = useTheme();
   if (!user) return <Page><Empty title='Connect GitHub' action={<Button mode='contained' onPress={() => router.navigate('/sign-in')}>Sign in</Button>} /></Page>;
   const sorted = [...jobs].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
   return <Page>
