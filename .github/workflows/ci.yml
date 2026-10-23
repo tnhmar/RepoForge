@@ -1,7 +1,9 @@
 name: CI - RepoForge
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - v2
   pull_request: {}
   workflow_dispatch: {}
 permissions:
@@ -42,7 +44,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     env:
-      GITHUB_CLIENT_SECRET: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && secrets.REPOFORGE_CLIENT_SECRET || '' }}
+      GITHUB_CLIENT_SECRET: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v2') && secrets.REPOFORGE_CLIENT_SECRET || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
