@@ -5,6 +5,7 @@ import { ActivityIndicator, Button, Checkbox, Chip, Dialog, Portal, Text, TextIn
 import { useSession } from '../auth';
 import { api, enc, repoPath } from '../github';
 import { useRepositoryIndex } from '../ux/repositoryIndex';
+import type { Repo } from '../github';
 import { Heading, Icon, Notice, Page, Panel, Row, styles } from '../components/ui';
 import { enableLocalAlerts, useAlertPreferences } from './alerts';
 import { csv, diffLines, dispatchInputs, validRepository, type ActionJob, type Artifact, type ChangedFile, type Comment, type PullReview, type Release, type Run, type Thread, type Workflow } from './model';
@@ -36,7 +37,7 @@ function WriteProvider({ children }: { children: ReactNode }) {
 function ResourceState({ loading, error }: { loading: boolean; error?: string }) { return <>{loading ? <ActivityIndicator /> : null}{error ? <Notice>{error}</Notice> : null}</>; }
 function Pagination({ page, more, change }: { page: number; more: boolean; change: (page: number) => void }) { return <Row><Button disabled={page <= 1} onPress={() => change(page - 1)}>Previous</Button><Text>Page {page}</Text><Button disabled={!more} onPress={() => change(page + 1)}>Next</Button></Row>; }
 async function openGitHub(url: string) { if (!/^https:\/\/github\.com\//.test(url)) return; await Linking.openURL(url); }
-export function RepositoryEntry() { const { name } = useLocalSearchParams<{ name: string }>(); return <RepositoryWorkspaceBridge full={name || ''} />; }
+export function RepositoryEntry() { const { name } = useLocalSearchParams<{ name: string }>(); return <Page><Heading eyebrow='Repository' title={name || 'Repository'} /><RepositoryToolsSection full={name || ''} section='Issues' /></Page>; }
 export function RepositoryToolsSection({ full, section }: { full: string; section: 'Issues' | 'Pull requests' | 'Actions' | 'Releases' | 'Alerts' }) { const user = useSession((s) => s.user); return <WriteProvider key={`${user?.id}:${full}:${section}`}>{section === 'Alerts' ? <AlertSettings /> : validRepository(full) ? <>{section === 'Issues' ? <Threads full={full} kind='issues' /> : section === 'Pull requests' ? <Threads full={full} kind='pulls' /> : section === 'Actions' ? <Actions full={full} /> : <Releases full={full} />}</> : <Notice>Repository name is not valid.</Notice>}</WriteProvider>; }
 export function WorkbenchScreen() {
   const params = useLocalSearchParams<{ repo?: string }>(); const router = useRouter(); const user = useSession((s) => s.user); const repoIndex = useRepositoryIndex(); const [query, setQuery] = useState(params.repo || '');
