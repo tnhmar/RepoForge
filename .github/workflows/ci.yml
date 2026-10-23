@@ -12,7 +12,6 @@ concurrency:
 env:
   EXPO_PUBLIC_GITHUB_CLIENT_ID: ${{ vars.EXPO_PUBLIC_GITHUB_CLIENT_ID }}
   EXPO_PUBLIC_GITHUB_APP_SLUG: ${{ vars.EXPO_PUBLIC_GITHUB_APP_SLUG }}
-  EXPO_PUBLIC_AUTH_BROKER_URL: ${{ vars.EXPO_PUBLIC_AUTH_BROKER_URL }}
 jobs:
   test:
     name: Lint, typecheck, and test
@@ -42,6 +41,8 @@ jobs:
     name: Build standalone Android APK
     needs: test
     runs-on: ubuntu-latest
+    env:
+      GITHUB_CLIENT_SECRET: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && secrets.GITHUB_CLIENT_SECRET || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -84,4 +85,4 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           gh release delete latest-apk --cleanup-tag --yes || true
-          gh release create latest-apk repoforge.apk --prerelease --target "$SHA" --title "Latest test APK" --notes "RepoForge test build from $SHA, run ${{ github.run_number }}. GitHub App and HTTPS broker configuration are required for sign-in. Not production-signed."
+          gh release create latest-apk repoforge.apk --prerelease --target "$SHA" --title "Latest test APK" --notes "RepoForge Android-only PKCE test build from $SHA, run ${{ github.run_number }}. Developer GitHub App configuration is required; no backend. App-level client secret is extractable from this APK. Not production-signed."

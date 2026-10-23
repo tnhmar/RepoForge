@@ -1,1 +1,1 @@
-export { SettingsScreen as default } from '../../src/screens/Live';
+export { AccountScreen as default } from '../../src/screens/Account';

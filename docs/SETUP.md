@@ -1,48 +1,54 @@
-# RepoForge 0.2: deployment and operating limits
+# RepoForge 0.3 — developer setup, no backend
 
-## Status
+RepoForge is an Android public client. Authentication, refresh, repository browsing and uploads communicate directly with GitHub. No server, token broker, database, webhook receiver, app private key or paid hosting is required. The obsolete broker file from 0.2 is unused; its deletion is a separate connector operation. The npm broker command and broker-URL dependency are removed. Earlier setup instructions requiring hosting are superseded.
 
-This commit adds live implementation code, not evidence of a successful build or deployed authentication. No local install, typecheck, lint, tests, APK build or post-push inspection was performed. The new GitHub Actions pipeline is responsible for validation. CI success and device testing must still be observed by the owner.
+## One-time GitHub App registration
 
-The earlier UI-only description in docs/IMPLEMENTATION.md documents milestone 0.1 and is superseded here. Bundled fixtures in src/data.ts are no longer used by the live routes. Item 5 (issues, PRs, Actions browsing, notifications, releases UI, multi-account and Enterprise) remains deferred.
+1. Open your GitHub account Settings → Developer settings → GitHub Apps → New GitHub App.
+2. Choose a unique app name. Use the public RepoForge repository URL as the homepage; a hosted website is unnecessary.
+3. Set the exact user authorization callback to `repoforge://oauth`. Disable wildcard matching. Do not configure a hosted callback.
+4. Keep user-token expiration enabled. RepoForge also requests `offline_access` to require an expiring access/refresh pair. This scope controls expiration, not repository permissions.
+5. Keep Device Flow disabled. Keep Request user authorization during installation disabled so Android starts authorization with its own PKCE/state. Leave Setup URL empty.
+6. Disable active webhooks. Do not generate or distribute an app private key for this client.
+7. Repository permissions: Metadata read; Contents read/write. Workflows read/write only if workflow-file imports are intended. No issue, pull-request, organization or account permissions are needed for this milestone.
+8. Administration is NOT required for ZIP publication into existing repositories. The optional personal-repository creation button in the existing repository screen has separate endpoint permission requirements and can fail without them. Do not grant broad administration solely to enable imports; create a repository on GitHub if needed.
+9. Choose installation visibility: any account for public distribution, or your account only while privately testing.
+10. Save the registration, note its Client ID (not App ID), note its slug, and generate its client secret.
 
-## Authentication decision
+## Configure GitHub Actions builds
 
-GitHub App user authorization with system-browser code flow, S256 PKCE, random state, expiring tokens and a minimal HTTPS token broker. No device flow, client secret in the APK, app private key, password capture, or personal-token login. The broker processes authentication tokens, never project contents. Tokens are stored with Expo SecureStore; publication metadata is in AsyncStorage. Session data and job display are scoped by durable GitHub user ID.
+Repository Settings → Secrets and variables → Actions:
 
-1. Register a GitHub App in your developer settings. Use your RepoForge repository URL as the homepage and EXACT callback `repoforge://oauth`. Disable callback wildcard matching. Keep device flow disabled. This callback requires the standalone Android build, not Expo Go.
-2. Repository permissions: Metadata read, Contents read/write. Add Workflows read/write only if workflow import is needed. Add Administration read/write only if using in-app repository creation. No issue, PR, or organization-membership permission is needed for this milestone. Keep expiring user access tokens enabled. Webhooks are not used.
-3. Install the app on selected repositories or all repositories. Organization policy can require approval and SAML SSO. User permissions and installation permissions both constrain writes. New personal repositories may require installation access to be updated before browsing.
-4. Deploy broker/server.mjs using Node 22 behind an HTTPS reverse proxy. Set SERVER-ONLY environment variables `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, optionally `HOST` and `PORT`. Default listener is 127.0.0.1:3000. Never put the client secret in repository variables prefixed EXPO_PUBLIC, source, logs, or the APK. Keep tokens out of reverse-proxy request logging. Use process supervision and infrastructure-level rate limits; the in-process IP limiter is only a basic safeguard and sees the proxy IP by default. Run `npm run broker` on the server. No server-side token database is used.
-5. Add GitHub Actions repository VARIABLES (not secrets): `EXPO_PUBLIC_GITHUB_CLIENT_ID`, `EXPO_PUBLIC_GITHUB_APP_SLUG`, `EXPO_PUBLIC_AUTH_BROKER_URL`. The last value is the broker's HTTPS origin without a trailing slash or path. These are public build configuration. Use the same names in your local environment for development. Rebuild after changing them. The server client ID must match the app client ID.
-6. Sign in in the APK, install/manage access from Settings, then refresh Repositories. The app lists installation accounts and paginates their repositories. GitHub remains the final authorization authority; API errors report restrictions. Sign-out clears the local token. Explicit revoke asks the broker to revoke the token; on network failure revoke manually in GitHub settings.
+- VARIABLE `EXPO_PUBLIC_GITHUB_CLIENT_ID`: the GitHub App Client ID.
+- VARIABLE `EXPO_PUBLIC_GITHUB_APP_SLUG`: the app slug.
+- SECRET `GITHUB_CLIENT_SECRET`: the app client secret. Do not paste it in chat, source code, issues or logs.
 
-No App registration, server deployment, secret creation, or repository-variable configuration is performed by this source commit. Those require owner setup outside the available connector's capabilities.
+Delete the old `EXPO_PUBLIC_AUTH_BROKER_URL` variable if it exists; it is no longer read. No hosted service configuration is needed.
 
-## CI pipeline
+The client secret is injected only into the Android build job for trusted main pushes / main manual runs, not tests or PR builds. PR APKs intentionally lack sign-in configuration. app.config.ts embeds the registration values in the Android app configuration. Never print full resolved Expo configuration in CI because it includes the distributed value. Rebuild after configuration or app-secret changes.
 
-Reconstructed from CitizenshipExam workflow commit history: original 0e534f561f834fcf67f85fcb5b1772065cfe01ac, build/prerelease change 5ccf44c653f2b264539ea9a52b78d0f0b7e39af8, PR-trigger fix 595b8a236e87d6abd234101d8d04db8b20ffa972.
+## Public-client threat model — important
 
-Push main, any PR, or manual dispatch -> Node 22 install -> Expo SDK alignment -> typecheck/lint/Jest -> JDK 17 -> Expo prebuild -> Gradle assembleRelease -> APK artifact. Trusted main builds replace the rolling `latest-apk` prerelease. PR builds NEVER publish releases. The build consumes exactly the dependency manifests resolved by its test job. Artifacts include the generated lockfile; commit a reviewed lockfile later for reproducibility across separate CI runs. Existing reference version specifications remain unchanged; new native packages use documented SDK 56 version ranges. Expo alignment may update compatible patch specifications inside the runner.
+This GitHub client secret is EXTRACTABLE FROM THE APK, including public release APKs. Using an Actions secret keeps it out of source and ordinary logs; it does not hide it from application users. This is GitHub's documented native/public-client authorization-code + PKCE model. It must never be used as proof of an authentic official installation or as a key to your own services. Public clients can be impersonated. Do not distribute an app private key.
 
-These are test APKs using generated native signing configuration, not a production signing setup. Do not rely on signing-key continuity for updates between builds. Production signing, secure keystore storage and Play Store delivery are not included.
+User access tokens and refresh tokens are different credentials: stored only in platform SecureStore, never in app configuration or AsyncStorage, and never logged. Rotate the public-client secret with a coordinated rebuild if required; old APK refresh may stop working after rotation.
 
-## Live repository functions
+## User experience
 
-Installation-account selection, paginated repository and branch lists, local search/filter of the current repository page, directory navigation, UTF-8 text/README source display up to 256 KiB, GitHub links, personal repository creation, and separately confirmed empty-repository initialization. Initialization creates README.md in an initial commit and cannot overwrite an existing README because no existing file SHA is supplied. README source is displayed as text, not rendered Markdown. Directory endpoint results may be capped; import uses a complete recursive Git tree and rejects truncation.
+See docs/USER_GUIDE.md. Users do not register applications, configure secrets, deploy services or paste access tokens. Sign in → choose repositories if needed → return → open repositories. The Account screen checks access after browser return and offers an explicit refresh. GitHub installation approval and user authorization are distinct steps. Organizations can require owner approval and SAML SSO.
 
-## Real ZIP import
+## Token lifecycle and failure handling
 
-Select repository -> select native ZIP document -> validate archive -> configure existing base and NEW target branch -> choose optional destination, enclosing-folder removal and sensitive-file exclusions -> calculate complete live added/modified/unchanged/deleted preview -> acknowledge deletions -> approve publication.
+Authorization uses the system browser, random state and S256 PKCE. Codes and refresh grants are sent directly to GitHub over HTTPS in a form body. The returned identity is checked with GET /user and recorded using its stable numeric ID. Callback codes are accepted only by a matching in-memory authorization request; an interrupted process requires fresh sign-in.
 
-Regular file bytes are preserved, including binary content; executable flags are taken from Unix ZIP attributes when supplied. Files are decompressed into bounded memory, not written using archive paths. Only the picker-created cached ZIP copy is removed afterward. Git has no tracked empty-directory representation. Symlinks/special files, .git entries, encryption, split archives, ZIP64 and non-UTF-8 non-ASCII names are rejected rather than silently transformed. Compression methods 0 and 8 are supported. Central/local headers, duplicate and case-normalized paths, file/directory collisions, declared and actual sizes, CRC, expansion ratios, and entry bounds are checked. This parser still needs extensive adversarial testing and a security review before public release.
+Access/refresh pairs and both expiration times are stored together. Refresh is single-flight and saves the rotated pair before another network request. Ambiguous or failed refresh clears the old session and requests sign-in rather than repeatedly reusing a possibly spent refresh token. Sign-out cannot guarantee recall of a request already sent. Explicit access-token revocation talks directly to GitHub; failure is surfaced as unconfirmed, with instructions for manual app-authorization revocation.
 
-Initial policy: 20 MiB compressed, 50 MiB extracted, 5 MiB per file, 300 regular files, 1000 archive entries, expansion <=200:1, path <=1024 UTF-8 bytes / 40 segments. These are app limits, NOT GitHub service limits. Full destination tree <=20,000 entries. Secret filename warnings are heuristic and cannot guarantee that source files contain no credentials.
+The storage key changes from v1 to v2; old broker-era sessions are removed locally and users sign in again. A session change invalidates pending saves. No project bytes pass through authentication infrastructure.
 
-Add/update retains destination files absent from the ZIP. Replacement removes only paths in the selected destination; every deletion is shown, including previously existing files excluded from the incoming ZIP. File/directory or case collisions fail closed. Workflow changes can trigger GitHub Actions and need Workflows write permission.
+## CI and validation
 
-Publication creates binary-safe blobs, the complete resulting tree, one commit parented to the reviewed base, and finally a NEW branch reference. Existing branches are never updated or force-pushed. The base is checked before upload and before commit creation; a concurrent base change afterward does not overwrite it because publication still only creates a new branch. Target-name races fail safely at reference creation. Object uploads alone do not publish a branch.
+The existing Node 22 / Expo SDK 56 / JDK 17 / Gradle / latest-apk pipeline is preserved. Tests cover form construction, PKCE verifier requirements, callback-state checks, expiring token-pair validation, and the previous ZIP/import logic. No install, lint, typecheck, tests, device run, CI inspection or post-push verification was performed in preparing this change. Source implementation is not proof that CI or a real sign-in passes. These remain test APKs, not a production signing or audited security release.
 
-Writes are serialized/paced at least 8 seconds apart to reduce primary/secondary content-generation limits; stricter endpoint limits can still return errors. Rate errors expose wait information; writes are not blindly retried. Foreground progress and cooperative network cancellation are implemented. An already-sent branch-creation request cannot be recalled. A lost response at final publication is explicitly recorded as UNKNOWN, with commit SHA and a branch-check link. Confirm GitHub's state before retrying.
+## Official basis
 
-Retry within a running process reuses confirmed uploaded blob hashes. Job status and any created commit SHA persist locally; file bytes and full previews do not. Process death or app restart requires reselecting the ZIP and rebuilding the preview. This is NOT durable background upload, automatic resume, a filesystem Git client, or a production-ready audited importer.
+GitHub Docs: Best practices for creating a GitHub App (Client secrets / public clients); Generating a user access token for a GitHub App; Refreshing user access tokens. The public-client secret limitation is intentional, not a claim that APK secrets are confidential.

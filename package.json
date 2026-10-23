@@ -1,6 +1,6 @@
 {
   "name": "repoforge",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
@@ -11,8 +11,7 @@
     "postinstall": "node scripts/build-assets.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "jest",
-    "broker": "node broker/server.mjs"
+    "test": "jest"
   },
   "jest": { "preset": "jest-expo", "testPathIgnorePatterns": ["/node_modules/", "/android/", "/ios/", "/broker/"] },
   "dependencies": {
