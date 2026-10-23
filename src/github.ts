@@ -30,10 +30,12 @@ export async function api<T>(path: string, method = 'GET', body?: unknown, signa
       const retry = response.headers.get('retry-after'); const reset = response.headers.get('x-ratelimit-reset');
       throw new GitHubError(response.status, `${data.message || 'GitHub request failed'}.${hint}${retry ? ` Retry after ${retry} seconds.` : reset && response.headers.get('x-ratelimit-remaining') === '0' ? ` Rate limit resets at ${new Date(Number(reset) * 1000).toLocaleTimeString()}.` : ''}`);
     }
-    return response.status === 204 ? undefined as T : await response.json() as T;
+    if (response.status === 204 || response.status === 205) return undefined as T;
+    const text = await response.text();
+    return text.trim() ? JSON.parse(text) as T : undefined as T;
   } catch (error) {
     if (error instanceof GitHubError) throw error;
-    throw new GitHubError(0, signal?.aborted ? 'Cancelled. A request already sent to GitHub may still complete.' : 'Network failure or timeout. For a write, the result may be unknown; do not assume it failed.');
+    throw new GitHubError(0, signal?.aborted ? 'Cancelled. A request already sent to GitHub may still complete.' : 'Network failure, timeout or unreadable response. For a write, the result may be unknown; do not assume it failed.');
   } finally { clearTimeout(timer); signal?.removeEventListener('abort', stop); }
 }
 export const enc = encodeURIComponent;

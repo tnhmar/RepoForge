@@ -1,1 +1,1 @@
-export { RepositoryScreen as default } from '../../src/screens/Live';
+export { RepositoryEntry as default } from '../../src/features/Workbench';

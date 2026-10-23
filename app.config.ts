@@ -8,6 +8,7 @@ export default {
     'expo-secure-store',
     'expo-audio',
     'expo-status-bar',
+    'expo-notifications',
   ],
   extra: {
     githubAuth: {
