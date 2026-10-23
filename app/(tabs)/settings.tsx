@@ -1,1 +1,2 @@
-export { PreferencesScreen as default } from '../../src/ux/authScreens';
+import { Redirect } from 'expo-router';
+export default function SettingsAlias() { return <Redirect href='/account' />; }
