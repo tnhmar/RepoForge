@@ -1,6 +1,6 @@
 # RepoForge 0.3 — developer setup, no backend
 
-RepoForge is an Android public client. Authentication, refresh, repository browsing and uploads communicate directly with GitHub. No server, token broker, database, webhook receiver, app private key or paid hosting is required. The obsolete broker file from 0.2 is unused; its deletion is a separate connector operation. The npm broker command and broker-URL dependency are removed. Earlier setup instructions requiring hosting are superseded.
+RepoForge is an Android public client. Authentication, refresh, repository browsing and uploads communicate directly with GitHub. No server, token broker, database, webhook receiver, app private key or paid hosting is required. The obsolete broker source has been deleted. The npm broker command and broker-URL dependency are removed. Earlier setup instructions requiring hosting are superseded.
 
 ## One-time GitHub App registration
 
@@ -20,12 +20,14 @@ RepoForge is an Android public client. Authentication, refresh, repository brows
 Repository Settings → Secrets and variables → Actions:
 
 - VARIABLE `EXPO_PUBLIC_GITHUB_CLIENT_ID`: the GitHub App Client ID.
-- VARIABLE `EXPO_PUBLIC_GITHUB_APP_SLUG`: the app slug.
-- SECRET `GITHUB_CLIENT_SECRET`: the app client secret. Do not paste it in chat, source code, issues or logs.
+- VARIABLE `EXPO_PUBLIC_GITHUB_APP_SLUG`: the app slug; for this registration, `repoforgehmar`. This is the final part of the app settings URL, not the Homepage URL.
+- SECRET `REPOFORGE_CLIENT_SECRET`: the app client secret. Do not paste it in chat, source code, issues or logs.
+
+Custom Actions secret names cannot start with `GITHUB_`. Do NOT create a repository secret named `GITHUB_CLIENT_SECRET`. The workflow reads `secrets.REPOFORGE_CLIENT_SECRET` and maps its value into the build process environment variable `GITHUB_CLIENT_SECRET`; app.config.ts continues reading `process.env.GITHUB_CLIENT_SECRET`. The repository secret name and process environment variable name are intentionally different. No actual secret value is committed in this mapping.
 
 Delete the old `EXPO_PUBLIC_AUTH_BROKER_URL` variable if it exists; it is no longer read. No hosted service configuration is needed.
 
-The client secret is injected only into the Android build job for trusted main pushes / main manual runs, not tests or PR builds. PR APKs intentionally lack sign-in configuration. app.config.ts embeds the registration values in the Android app configuration. Never print full resolved Expo configuration in CI because it includes the distributed value. Rebuild after configuration or app-secret changes.
+The client secret is injected only into the Android build job for trusted main pushes / main manual runs, not tests or PR builds. PR APKs intentionally lack sign-in configuration. app.config.ts embeds the registration values in the Android app configuration. Never print full resolved Expo configuration in CI because it includes the distributed value. Rebuild after configuration or app-secret changes. For a local developer build, supply the process environment variable `GITHUB_CLIENT_SECRET` outside source control.
 
 ## Public-client threat model — important
 
@@ -51,4 +53,4 @@ The existing Node 22 / Expo SDK 56 / JDK 17 / Gradle / latest-apk pipeline is pr
 
 ## Official basis
 
-GitHub Docs: Best practices for creating a GitHub App (Client secrets / public clients); Generating a user access token for a GitHub App; Refreshing user access tokens. The public-client secret limitation is intentional, not a claim that APK secrets are confidential.
+GitHub Docs: Best practices for creating a GitHub App (Client secrets / public clients); Generating a user access token for a GitHub App; Refreshing user access tokens; Secrets reference (naming restrictions). The public-client secret limitation is intentional, not a claim that APK secrets are confidential.
