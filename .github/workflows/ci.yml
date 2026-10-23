@@ -1,0 +1,87 @@
+name: CI - RepoForge
+on:
+  push:
+    branches: [main]
+  pull_request: {}
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  EXPO_PUBLIC_GITHUB_CLIENT_ID: ${{ vars.EXPO_PUBLIC_GITHUB_CLIENT_ID }}
+  EXPO_PUBLIC_GITHUB_APP_SLUG: ${{ vars.EXPO_PUBLIC_GITHUB_APP_SLUG }}
+  EXPO_PUBLIC_AUTH_BROKER_URL: ${{ vars.EXPO_PUBLIC_AUTH_BROKER_URL }}
+jobs:
+  test:
+    name: Lint, typecheck, and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Align native packages to the reference Expo SDK
+        run: npx expo install --fix
+        env:
+          CI: 1
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test -- --ci --watchAll=false
+      - name: Save resolved dependency manifests for the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: resolved-dependencies
+          path: |
+            package.json
+            package-lock.json
+          retention-days: 14
+  build-android:
+    name: Build standalone Android APK
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: resolved-dependencies
+          path: .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: npx expo prebuild --platform android --no-install
+      - run: chmod +x android/gradlew
+      - working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+      - run: cp android/app/build/outputs/apk/release/app-release.apk repoforge.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repoforge-android-release-apk
+          path: repoforge.apk
+          retention-days: 14
+  publish-apk:
+    name: Publish latest-apk prerelease
+    needs: build-android
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: repoforge-android-release-apk
+          path: .
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          gh release delete latest-apk --cleanup-tag --yes || true
+          gh release create latest-apk repoforge.apk --prerelease --target "$SHA" --title "Latest test APK" --notes "RepoForge test build from $SHA, run ${{ github.run_number }}. GitHub App and HTTPS broker configuration are required for sign-in. Not production-signed."
