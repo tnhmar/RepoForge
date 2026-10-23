@@ -26,7 +26,7 @@ export function SignInScreen() {
 }
 export function AccessScreen() {
   const { manage } = useLocalSearchParams<{ manage?: string }>(); const router = useRouter(); const user = useSession((s) => s.user); const index = useRepositoryIndex(); const [error, setError] = useState(''); const theme = useTheme();
-  useEffect(() => { let alive = true; void Promise.resolve().then(() => { if (alive && user) return refreshRepositories(); }); const sub = AppState.addEventListener('change', (state) => { if (state === 'active' && alive) void refreshRepositories(); }); return () => { alive = false; sub.remove(); }; }, [user?.id]);
+  useEffect(() => { let alive = true; void Promise.resolve().then(() => { if (alive && user) return refreshRepositories(); }); const sub = AppState.addEventListener('change', (state) => { if (state === 'active' && alive) void refreshRepositories(); }); return () => { alive = false; sub.remove(); }; }, [user]);
   if (!user) return <Redirect href='/sign-in' />;
   const own = index.userId === user.id;
   if (manage !== '1' && own && !index.loading && index.rows.length) return <Redirect href='/repositories' />;

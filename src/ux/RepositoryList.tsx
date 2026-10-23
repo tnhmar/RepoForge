@@ -10,7 +10,7 @@ import { refreshRepositories, useRepositoryIndex } from './repositoryIndex';
 export function RepositoryListScreen() {
   const user = useSession((s) => s.user); const index = useRepositoryIndex(); const router = useRouter(); const { focus } = useLocalSearchParams<{ focus?: string }>(); const theme = useTheme();
   const [query, setQuery] = useState(''); const [owner, setOwner] = useState('all'); const [visibility, setVisibility] = useState('all'); const [sort, setSort] = useState('updated'); const input = useRef<NativeTextInput>(null);
-  useEffect(() => { if (user && (!index.attempted || index.userId !== user.id)) void refreshRepositories(); }, [user?.id, index.attempted, index.userId]);
+  useEffect(() => { if (user && (!index.attempted || index.userId !== user.id)) void refreshRepositories(); }, [user, index.attempted, index.userId]);
   useEffect(() => { if (focus === '1') { const id = requestAnimationFrame(() => input.current?.focus()); return () => cancelAnimationFrame(id); } }, [focus]);
   const rows = useMemo(() => index.rows.filter((row) => index.userId === user?.id && (owner === 'all' || row.owner === owner) && (visibility === 'all' || row.private === (visibility === 'private')) && `${row.fullName} ${row.description}`.toLowerCase().includes(query.trim().toLowerCase())).sort((a, b) => sort === 'name' ? a.fullName.localeCompare(b.fullName) : b.updatedAt.localeCompare(a.updatedAt)), [index.rows, index.userId, user?.id, owner, visibility, query, sort]);
   if (!user) return <Redirect href='/sign-in' />;
