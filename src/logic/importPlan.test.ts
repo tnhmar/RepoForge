@@ -1,7 +1,8 @@
+import { describe, expect, test } from '@jest/globals';
 import { planImport, safePath } from './importPlan';
 const options = { stripRoot: true, destination: '', excludeSensitive: true };
 describe('archive preview planning', () => {
-  test.each(['../secret', '/etc/passwd', 'C:/file', 'a/../b', '.git/config', 'a//b', 'a\\b'])('rejects unsafe path %s', (path) => { expect(() => safePath(path)).toThrow(); });
+  test.each(['../secret', '/etc/passwd', 'C:/file', 'a/../b', '.git/config', 'a//b', 'a\\b'])('rejects unsafe path %s', (path: string) => { expect(() => safePath(path)).toThrow(); });
   test('strips one enclosing folder and visibly excludes secrets', () => {
     const plan = planImport([{ path: 'project/src/App.tsx', bytes: 10 }, { path: 'project/.env', bytes: 2 }], options);
     expect(plan.files.map((f) => f.path)).toEqual(['src/App.tsx']);

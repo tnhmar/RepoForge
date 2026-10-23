@@ -1,3 +1,4 @@
+import { describe, expect, test } from '@jest/globals';
 import { strToU8, zipSync } from 'fflate';
 import { readZip, crc32 } from './zip';
 describe('bounded ZIP reader', () => {
