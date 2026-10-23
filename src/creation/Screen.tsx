@@ -4,7 +4,7 @@ import { Linking, Pressable, View } from 'react-native';
 import { Button, Checkbox, Chip, Dialog, Portal, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSession } from '../auth';
 import { api } from '../github';
-import { Page } from '../components/ui';
+import { Notice, Page, Panel } from '../components/ui';
 import { InlineError, Loading, PageTitle } from '../ux/primitives';
 import { refreshRepositories, useRepositoryIndex } from '../ux/repositoryIndex';
 import { Picker, type Option } from './Choice';
