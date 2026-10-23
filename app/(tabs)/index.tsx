@@ -1,1 +1,2 @@
-export { HomeScreen as default } from '../../src/screens/Live';
+import { Redirect } from 'expo-router';
+export default function Index() { return <Redirect href='/repositories' />; }

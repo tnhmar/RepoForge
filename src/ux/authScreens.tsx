@@ -1,0 +1,40 @@
+import { useEffect, useState } from 'react';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
+import { AppState, Linking, View } from 'react-native';
+import { Avatar, Button, Dialog, Portal, Text, useTheme } from 'react-native-paper';
+import { create } from 'zustand';
+import { appSlug, configured, signIn, signOut, useSession } from '../auth';
+import { Icon, Page } from '../components/ui';
+import { useApp } from '../store';
+import { useJobs } from '../liveStore';
+import { Choice, Empty, InlineError, Loading, PageTitle } from './primitives';
+import { refreshRepositories, useRepositoryIndex } from './repositoryIndex';
+const useConnection = create<{ stage: 'idle' | 'browser' | 'finishing'; error: string }>(() => ({ stage: 'idle', error: '' }));
+export async function connectGitHub() {
+  if (useConnection.getState().stage !== 'idle') return;
+  useConnection.setState({ stage: 'browser', error: '' });
+  try { await signIn(); if (useSession.getState().user) { useConnection.setState({ stage: 'finishing' }); await refreshRepositories(); } }
+  catch (error) { useConnection.setState({ error: error instanceof Error ? error.message : 'Connection failed.' }); }
+  finally { useConnection.setState({ stage: 'idle' }); }
+}
+export function SignInScreen() {
+  const ready = useSession((s) => s.ready); const user = useSession((s) => s.user); const stage = useConnection((s) => s.stage); const error = useConnection((s) => s.error); const theme = useTheme();
+  useEffect(() => { const sub = AppState.addEventListener('change', (value) => { if (value === 'active' && useConnection.getState().stage === 'browser') useConnection.setState({ stage: 'finishing' }); }); return () => sub.remove(); }, []);
+  if (!ready) return <Page><Loading label='Opening RepoForge…' /></Page>;
+  if (user) return <Redirect href='/repositories' />;
+  return <Page><View style={{ width: '100%', maxWidth: 400, alignSelf: 'center', paddingTop: 56, gap: 24 }}><View style={{ alignItems: 'center', gap: 14 }}><Icon name='branch' size={48} color={theme.colors.onSurface} /><Text variant='headlineMedium' style={{ fontWeight: '600' }}>Sign in to RepoForge</Text><Text style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}>Your repositories, wherever you work.</Text></View>{stage === 'idle' ? <Button mode='contained' disabled={!configured()} contentStyle={{ minHeight: 48 }} onPress={() => void connectGitHub()}>Sign in with GitHub</Button> : <Loading label={stage === 'browser' ? 'Complete sign-in on GitHub…' : 'Connecting your account…'} />}{!configured() ? <InlineError message='This build is not ready for sign-in.' detail='Developer registration values are missing. Install a configured main-branch APK. Users do not need to enter tokens or set up a server.' /> : null}{error ? <InlineError message='Sign-in did not finish.' detail={error} retry={() => void connectGitHub()} /> : null}<Text variant='bodySmall' style={{ textAlign: 'center', color: theme.colors.onSurfaceVariant }}>Your password stays with GitHub.</Text></View></Page>;
+}
+export function AccessScreen() {
+  const { manage } = useLocalSearchParams<{ manage?: string }>(); const router = useRouter(); const user = useSession((s) => s.user); const index = useRepositoryIndex(); const [error, setError] = useState(''); const theme = useTheme();
+  useEffect(() => { let alive = true; void Promise.resolve().then(() => { if (alive && user) return refreshRepositories(); }); const sub = AppState.addEventListener('change', (state) => { if (state === 'active' && alive) void refreshRepositories(); }); return () => { alive = false; sub.remove(); }; }, [user?.id]);
+  if (!user) return <Redirect href='/sign-in' />;
+  const own = index.userId === user.id;
+  if (manage !== '1' && own && !index.loading && index.rows.length) return <Redirect href='/repositories' />;
+  return <Page><View style={{ width: '100%', maxWidth: 480, alignSelf: 'center', paddingTop: 32, gap: 20 }}><PageTitle title={manage === '1' ? 'Repository access' : 'Choose your repositories'} /><Text style={{ color: theme.colors.onSurfaceVariant }}>Choose which repositories RepoForge can access on GitHub.</Text>{index.loading ? <Loading label='Checking access…' /> : own && index.rows.length ? <Text>{index.rows.length} repositories connected.</Text> : null}<Button mode='contained' disabled={index.loading || !appSlug} onPress={() => { setError(''); void Linking.openURL(`https://github.com/apps/${encodeURIComponent(appSlug)}/installations/new`).catch(() => setError('Could not open GitHub.')); }}>Choose repositories on GitHub</Button><Button disabled={index.loading} onPress={() => void refreshRepositories()}>Check again</Button>{manage === '1' ? <Button onPress={() => router.back()}>Done</Button> : null}{index.error || error ? <InlineError message='Could not check repository access.' detail={error || index.error} retry={() => void refreshRepositories()} /> : null}<Text variant='bodySmall' style={{ color: theme.colors.onSurfaceVariant }}>Organization access may need owner approval. Return here after making your selection.</Text></View></Page>;
+}
+export function PreferencesScreen() {
+  const user = useSession((s) => s.user); const router = useRouter(); const theme = useApp((s) => s.theme); const setTheme = useApp((s) => s.setTheme); const [confirm, setConfirm] = useState<'signout' | 'history' | null>(null); const [details, setDetails] = useState(false); const [error, setError] = useState(''); const paper = useTheme();
+  if (!user) return <Redirect href='/sign-in' />;
+  const finish = async () => { const action = confirm; setConfirm(null); try { if (action === 'history') useJobs.getState().clear(user.id); else await signOut(false); } catch { setError('Could not complete the action. Try again.'); } };
+  return <Page><PageTitle title='Settings' /><View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 }}><Avatar.Text size={44} label={user.login.slice(0, 1).toUpperCase()} /><View><Text variant='titleMedium'>{user.login}</Text><Text style={{ color: paper.colors.onSurfaceVariant }}>Connected to GitHub</Text></View></View><Button mode='outlined' style={{ alignSelf: 'flex-start' }} onPress={() => router.navigate({ pathname: '/connect', params: { manage: '1' } })}>Manage repository access</Button><Text accessibilityRole='header' variant='titleMedium'>Appearance</Text><Choice label='Appearance' value={theme} items={[{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} onChange={(value) => setTheme(value as 'system' | 'light' | 'dark')} /><Text accessibilityRole='header' variant='titleMedium'>Account</Text><Button style={{ alignSelf: 'flex-start' }} onPress={() => setConfirm('history')}>Clear upload history</Button><Button textColor={paper.colors.error} style={{ alignSelf: 'flex-start' }} onPress={() => setConfirm('signout')}>Sign out</Button><Button style={{ alignSelf: 'flex-start' }} onPress={() => setDetails(!details)}>{details ? 'Hide privacy details' : 'Privacy & authorization details'}</Button>{details ? <Text variant='bodySmall'>Personal tokens are stored in device secure storage. GitHub controls repository access. To revoke all user authorization, use GitHub Settings → Applications → Authorized GitHub Apps. The public-client app secret is extractable from the APK; no GitHub App private key is included. There is no RepoForge backend.</Text> : null}{error ? <InlineError message={error} /> : null}<Portal><Dialog visible={confirm !== null} onDismiss={() => setConfirm(null)}><Dialog.Title>{confirm === 'history' ? 'Clear upload history?' : 'Sign out of RepoForge?'}</Dialog.Title><Dialog.Content><Text>{confirm === 'history' ? 'Removes local history only. GitHub files and commits are unchanged.' : 'Removes this device’s credentials. An upload already sent to GitHub may still complete.'}</Text></Dialog.Content><Dialog.Actions><Button onPress={() => setConfirm(null)}>Cancel</Button><Button onPress={() => void finish()}>{confirm === 'history' ? 'Clear history' : 'Sign out'}</Button></Dialog.Actions></Dialog></Portal></Page>;
+}

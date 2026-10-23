@@ -1,1 +1,1 @@
-export { AccountScreen as default } from '../../src/screens/Account';
+export { PreferencesScreen as default } from '../../src/ux/authScreens';

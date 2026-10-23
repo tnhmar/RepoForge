@@ -1,1 +1,1 @@
-export { RepositoriesScreen as default } from '../../src/screens/Live';
+export { RepositoryListScreen as default } from '../../src/ux/RepositoryList';

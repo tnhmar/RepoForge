@@ -1,2 +1,3 @@
 import { Redirect } from 'expo-router';
-export default function OAuthReturn() { return <Redirect href='/settings' />; }
+import { useSession } from '../src/auth';
+export default function OAuthReturn() { const user = useSession((s) => s.user); return <Redirect href={user ? '/repositories' : '/sign-in'} />; }
