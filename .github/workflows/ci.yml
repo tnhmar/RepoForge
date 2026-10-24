@@ -4,6 +4,7 @@ on:
     branches:
       - main
       - v2
+      - v3
   pull_request: {}
   workflow_dispatch: {}
 permissions:
@@ -44,7 +45,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     env:
-      GITHUB_CLIENT_SECRET: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v2') && secrets.REPOFORGE_CLIENT_SECRET || '' }}
+      GITHUB_CLIENT_SECRET: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v2' || github.ref == 'refs/heads/v3') && secrets.REPOFORGE_CLIENT_SECRET || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
