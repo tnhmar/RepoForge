@@ -1,1 +1,1 @@
-export { ImportScreen as default } from '../../src/screens/Live';
+export { UploadScreen as default } from '../../src/v3/Upload';
