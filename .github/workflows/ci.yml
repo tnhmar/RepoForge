@@ -13,8 +13,8 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 env:
-  EXPO_PUBLIC_GITHUB_CLIENT_ID: ${{ vars.EXPO_PUBLIC_GITHUB_CLIENT_ID }}
-  EXPO_PUBLIC_GITHUB_APP_SLUG: ${{ vars.EXPO_PUBLIC_GITHUB_APP_SLUG }}
+  EXPO_PUBLIC_GITHUB_CLIENT_ID: ${{ vars.EXPO_PUBLIC_GITHUB_CLIENT_ID || secrets.EXPO_PUBLIC_GITHUB_CLIENT_ID }}
+  EXPO_PUBLIC_GITHUB_APP_SLUG: ${{ vars.EXPO_PUBLIC_GITHUB_APP_SLUG || secrets.EXPO_PUBLIC_GITHUB_APP_SLUG }}
 jobs:
   test:
     name: Lint, typecheck, and test
@@ -41,11 +41,16 @@ jobs:
             package-lock.json
           retention-days: 14
   build-android:
-    name: Build standalone Android APK
+    name: Build configured Android APK
     needs: test
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v2' || github.ref == 'refs/heads/v3')
     runs-on: ubuntu-latest
     env:
-      GITHUB_CLIENT_SECRET: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v2' || github.ref == 'refs/heads/v3') && secrets.REPOFORGE_CLIENT_SECRET || '' }}
+      GITHUB_CLIENT_SECRET: ${{ secrets.REPOFORGE_CLIENT_SECRET }}
+      REPOFORGE_REQUIRE_AUTH: '1'
+      REPOFORGE_BUILD_BRANCH: ${{ github.ref_name }}
+      REPOFORGE_BUILD_SHA: ${{ github.sha }}
+      REPOFORGE_BUILD_RUN_ID: ${{ github.run_id }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -56,6 +61,8 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+      - name: Require and validate embedded sign-in configuration
+        run: node scripts/check-auth-config.cjs
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -67,8 +74,10 @@ jobs:
       - run: cp android/app/build/outputs/apk/release/app-release.apk repoforge.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: repoforge-android-release-apk
-          path: repoforge.apk
+          name: repoforge-${{ github.ref_name }}-android-release-apk
+          path: |
+            repoforge.apk
+            apk-build-info.json
           retention-days: 14
   publish-apk:
     name: Publish latest-apk prerelease
@@ -81,7 +90,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: repoforge-android-release-apk
+          name: repoforge-main-android-release-apk
           path: .
       - env:
           GH_TOKEN: ${{ github.token }}
