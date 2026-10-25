@@ -5,7 +5,7 @@ import type { JobCheckpoint } from './liveStore';
 import { planImport } from './logic/importPlan';
 import type { ProjectFile } from './zip';
 export { publishBatched as publish } from './batchPublish';
-export type Options = { base: string; branch: string; destination: string; stripRoot: boolean; excludeSensitive: boolean; replace: boolean; message: string };
+export type Options = { base: string; branch: string; destination: string; stripRoot: boolean; excludeSensitive: boolean; replace: boolean; message: string; publication?: 'existing' | 'new' };
 export type Review = { repository: Repo; options: Options; head: string; baseTree?: string; baseEntries?: TreeEntry[]; baseObjects?: string[]; files: (ProjectFile & { sha: string })[]; tree: TreeEntry[]; changes: { path: string; status: string }[]; excluded: string[]; warnings: string[] };
 export type PublishCheckpoint = JobCheckpoint;
 export function validBranch(branch: string) { return !!branch && branch !== '@' && !/[\x00-\x20\x7F~^:?*\[\]\\]/.test(branch) && !branch.includes('..') && !branch.includes('@{') && branch.split('/').every((part) => !!part && !part.startsWith('.') && !part.endsWith('.') && !part.endsWith('.lock')); }
@@ -21,10 +21,13 @@ export function assembleTree(base: TreeEntry[], files: (ProjectFile & { sha: str
 }
 export async function reviewImport(repository: Repo, source: ProjectFile[], options: Options, signal?: AbortSignal): Promise<Review> {
   if (repository.archived || repository.permissions?.push === false) throw new Error('Repository is archived or your account cannot push.');
-  if (!validBranch(options.branch) || !validBranch(options.base) || options.branch === options.base || !options.message.trim()) throw new Error('Choose an existing base, a different new branch, and a commit message.');
+  const existing = options.publication === 'existing';
+  if (!validBranch(options.branch) || !validBranch(options.base) || (existing ? options.branch !== options.base : options.branch === options.base) || !options.message.trim()) throw new Error(existing ? 'Select one existing destination branch and enter a commit message.' : 'Choose a valid base, a different new branch and a commit message.');
+  if (existing && options.replace && options.destination.trim()) throw new Error('Full project mode replaces branch files at repository root. Clear the destination folder.');
   const plan = planImport(source.map((file) => ({ path: file.path, bytes: file.data.length })), options); if (!plan.files.length) throw new Error('No files remain after exclusions.');
   const allowed = new Set(plan.files.map((file) => file.path)); const files: Review['files'] = [];
   for (const file of source) { if (signal?.aborted) throw new Error('Cancelled'); const relative = plan.strippedRoot ? file.path.split('/').slice(1).join('/') : file.path; const path = options.destination.trim() ? `${options.destination.trim()}/${relative}` : relative; if (allowed.has(path)) files.push({ ...file, path, sha: await blobSha(file.data) }); }
-  const base = await snapshot(repository.full_name, options.base, signal); const result = assembleTree(base.tree, files, options.destination.trim(), options.replace); if (!result.changes.some((entry) => entry.status !== 'unchanged')) throw new Error('No project changes to commit.');
-  return { repository, options: { ...options, destination: options.destination.trim(), message: options.message.trim() }, head: base.head, baseTree: base.treeSha, baseEntries: base.tree, baseObjects: base.tree.filter((entry) => entry.type === 'blob').map((entry) => entry.sha), files, ...result, excluded: plan.excluded, warnings: [...plan.warnings, ...(result.changes.some((entry) => entry.path.startsWith('.github/workflows/') && entry.status !== 'unchanged') ? ['Workflow files change: Workflows write permission is required and GitHub Actions may run.'] : [])] };
+  const base = await snapshot(repository.full_name, options.base, signal); const result = assembleTree(base.tree, files, options.destination.trim(), options.replace);
+  const warnings = [...plan.warnings]; if (plan.strippedRoot) warnings.push('The enclosing ZIP folder is removed. Check the resulting file paths before publishing.'); if (options.replace && plan.excluded.length) warnings.push('Excluded ZIP files are absent from this full-project snapshot. Corresponding existing files can be deleted; review the deletion list.'); if (result.changes.some((entry) => entry.path.startsWith('.github/workflows/') && entry.status !== 'unchanged')) warnings.push('Workflow files change: Workflows write permission is required and GitHub Actions may run.');
+  return { repository, options: { ...options, destination: options.destination.trim(), message: options.message.trim() }, head: base.head, baseTree: base.treeSha, baseEntries: base.tree, baseObjects: base.tree.filter((entry) => entry.type === 'blob').map((entry) => entry.sha), files, ...result, excluded: plan.excluded, warnings };
 }
