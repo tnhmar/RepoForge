@@ -1,1 +1,1 @@
-export { HomeScreen as default } from '../../src/screens/Home';
+export { LaunchpadScreen as default } from '../../src/v3/Launchpad';

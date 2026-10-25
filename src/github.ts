@@ -1,42 +1,21 @@
-import { token } from './auth';
-export class GitHubError extends Error { constructor(public status: number, message: string) { super(message); } }
-export function pause(ms: number, signal?: AbortSignal) {
-  return new Promise<void>((resolve, reject) => {
-    if (signal?.aborted) { reject(new Error('Cancelled')); return; }
-    const stop = () => { clearTimeout(timer); reject(new Error('Cancelled')); };
-    const timer = setTimeout(() => { signal?.removeEventListener('abort', stop); resolve(); }, ms);
-    signal?.addEventListener('abort', stop, { once: true });
-  });
-}
-let lastWrite = 0;
-let queue = Promise.resolve();
-async function writeSlot(signal?: AbortSignal) {
-  const next = queue.catch(() => {}).then(async () => { await pause(Math.max(0, 8000 - (Date.now() - lastWrite)), signal); lastWrite = Date.now(); });
-  queue = next; await next;
-}
+import { token, useSession } from './auth';
+export class GitHubError extends Error { constructor(public status: number, message: string, public retryAfterMs = 0, public rateLimited = false) { super(message); } }
+export const accountId = () => useSession.getState().user?.id;
+export function pause(ms: number, signal?: AbortSignal) { return new Promise<void>((resolve, reject) => { if (signal?.aborted) { reject(new Error('Cancelled')); return; } const stop = () => { clearTimeout(timer); signal?.removeEventListener('abort', stop); reject(new Error('Cancelled')); }; const timer = setTimeout(() => { signal?.removeEventListener('abort', stop); resolve(); }, ms); signal?.addEventListener('abort', stop, { once: true }); }); }
+let lastWrite = 0; let blockedUntil = 0; let queue = Promise.resolve();
+async function waitUntil(when: () => number, signal?: AbortSignal) { while (when() > Date.now()) await pause(Math.min(60000, Math.max(1, when() - Date.now())), signal); }
+async function writeSlot(signal?: AbortSignal) { const next = queue.catch(() => {}).then(async () => { await waitUntil(() => Math.max(lastWrite + 8000, blockedUntil), signal); lastWrite = Date.now(); }); queue = next; await next; }
 export async function api<T>(path: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
-  if (!path.startsWith('/') || path.startsWith('//')) throw new Error('Invalid API path');
-  const access = await token();
-  if (method !== 'GET') await writeSlot(signal);
-  if (signal?.aborted) throw new Error('Cancelled');
-  const controller = new AbortController(); const stop = () => controller.abort();
-  signal?.addEventListener('abort', stop, { once: true });
-  const timer = setTimeout(stop, 45000);
+  if (!path.startsWith('/') || path.startsWith('//')) throw new Error('Invalid API path'); const expected = accountId(); if (!expected) throw new GitHubError(401, 'Sign in first.');
+  if (method !== 'GET') await writeSlot(signal); else await waitUntil(() => blockedUntil, signal);
+  if (signal?.aborted || accountId() !== expected) throw new Error('Cancelled or account changed.'); const access = await token(); if (signal?.aborted || accountId() !== expected) throw new Error('Cancelled or account changed.');
+  const controller = new AbortController(); const stop = () => controller.abort(); signal?.addEventListener('abort', stop, { once: true }); const timer = setTimeout(stop, 45000);
   try {
     const response = await fetch(`https://api.github.com${path}`, { method, headers: { Authorization: `Bearer ${access}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal });
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      const hint = response.status === 401 ? ' Sign in again.' : response.status === 403 ? ' Check app installation, repository permissions, SSO, rules and rate limits.' : response.status === 404 ? ' The resource may be missing or outside this app installation.' : '';
-      const retry = response.headers.get('retry-after'); const reset = response.headers.get('x-ratelimit-reset');
-      throw new GitHubError(response.status, `${data.message || 'GitHub request failed'}.${hint}${retry ? ` Retry after ${retry} seconds.` : reset && response.headers.get('x-ratelimit-remaining') === '0' ? ` Rate limit resets at ${new Date(Number(reset) * 1000).toLocaleTimeString()}.` : ''}`);
-    }
-    if (response.status === 204 || response.status === 205) return undefined as T;
-    const text = await response.text();
-    return text.trim() ? JSON.parse(text) as T : undefined as T;
-  } catch (error) {
-    if (error instanceof GitHubError) throw error;
-    throw new GitHubError(0, signal?.aborted ? 'Cancelled. A request already sent to GitHub may still complete.' : 'Network failure, timeout or unreadable response. For a write, the result may be unknown; do not assume it failed.');
-  } finally { clearTimeout(timer); signal?.removeEventListener('abort', stop); }
+    const remaining = response.headers.get('x-ratelimit-remaining'); const reset = Number(response.headers.get('x-ratelimit-reset')); if (remaining === '0' && Number.isFinite(reset) && reset > 0) blockedUntil = Math.max(blockedUntil, reset * 1000 + 1000);
+    if (!response.ok) { const data = await response.json().catch(() => ({})); const detail = typeof data.message === 'string' ? data.message : 'GitHub request failed'; const limited = response.status === 429 || (response.status === 403 && (remaining === '0' || /secondary rate|rate limit exceeded|abuse detection/i.test(detail))); const retry = response.headers.get('retry-after'); const parsed = retry ? /^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - Date.now() : 0; const wait = limited ? Math.max(60000, Number.isFinite(parsed) ? parsed : 0, remaining === '0' && Number.isFinite(reset) ? reset * 1000 + 1000 - Date.now() : 0) : 0; if (limited) blockedUntil = Math.max(blockedUntil, Date.now() + wait); const hint = response.status === 401 ? ' Sign in again.' : response.status === 403 ? ' Check app permissions, SSO, repository rules and rate limits.' : response.status === 404 ? ' Resource may be missing or outside the app installation.' : ''; throw new GitHubError(response.status, `${detail}.${hint}${limited ? ` Retry after ${new Date(blockedUntil).toLocaleTimeString()}.` : ''}`, wait, limited); }
+    if (response.status === 204 || response.status === 205) return undefined as T; const text = await response.text(); return text.trim() ? JSON.parse(text) as T : undefined as T;
+  } catch (error) { if (error instanceof GitHubError) throw error; throw new GitHubError(0, signal?.aborted ? 'Cancelled. A sent request may still complete.' : 'Network failure, timeout or unreadable response. A write outcome may be unknown.'); } finally { clearTimeout(timer); signal?.removeEventListener('abort', stop); }
 }
 export const enc = encodeURIComponent;
 export const repoPath = (full: string) => `/repos/${full.split('/').map(enc).join('/')}`;
@@ -49,14 +28,6 @@ export const installations = (page = 1) => api<{ installations: Installation[]; 
 export const installedRepos = (id: number, page = 1) => api<{ repositories: Repo[]; total_count: number }>(`/user/installations/${id}/repositories?per_page=30&page=${page}`);
 export const contents = (full: string, branch: string, path: string) => api<Content | Content[]>(`${repoPath(full)}/contents/${path.split('/').map(enc).join('/')}?ref=${enc(branch)}`);
 export type TreeEntry = { path: string; mode: string; type: 'blob' | 'tree' | 'commit'; sha: string };
-export type Snapshot = { head: string; tree: TreeEntry[] };
-export async function head(full: string, branch: string, signal?: AbortSignal) {
-  return (await api<{ object: { sha: string } }>(`${repoPath(full)}/git/ref/heads/${branch.split('/').map(enc).join('/')}`, 'GET', undefined, signal)).object.sha;
-}
-export async function snapshot(full: string, branch: string, signal?: AbortSignal): Promise<Snapshot> {
-  const sha = await head(full, branch, signal);
-  const commit = await api<{ tree: { sha: string } }>(`${repoPath(full)}/git/commits/${sha}`, 'GET', undefined, signal);
-  const tree = await api<{ tree: TreeEntry[]; truncated: boolean }>(`${repoPath(full)}/git/trees/${commit.tree.sha}?recursive=1`, 'GET', undefined, signal);
-  if (tree.truncated || tree.tree.length > 20000) throw new Error('Repository tree exceeds the supported complete-preview limit. Nothing was published.');
-  return { head: sha, tree: tree.tree.filter((entry) => entry.type !== 'tree') };
-}
+export type Snapshot = { head: string; tree: TreeEntry[]; treeSha?: string };
+export async function head(full: string, branch: string, signal?: AbortSignal) { return (await api<{ object: { sha: string } }>(`${repoPath(full)}/git/ref/heads/${branch.split('/').map(enc).join('/')}`, 'GET', undefined, signal)).object.sha; }
+export async function snapshot(full: string, branch: string, signal?: AbortSignal): Promise<Snapshot> { const sha = await head(full, branch, signal); const commit = await api<{ tree: { sha: string } }>(`${repoPath(full)}/git/commits/${sha}`, 'GET', undefined, signal); const tree = await api<{ tree: TreeEntry[]; truncated: boolean }>(`${repoPath(full)}/git/trees/${commit.tree.sha}?recursive=1`, 'GET', undefined, signal); if (tree.truncated || tree.tree.length > 20000) throw new Error('Repository exceeds the complete-preview limit. Nothing published.'); return { head: sha, treeSha: commit.tree.sha, tree: tree.tree.filter((entry) => entry.type !== 'tree') }; }
