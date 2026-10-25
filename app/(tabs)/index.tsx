@@ -1,2 +1,1 @@
-import { Redirect } from 'expo-router';
-export default function Start() { return <Redirect href='/repositories' />; }
+export { LaunchpadScreen as default } from '../../src/v3/Launchpad';
