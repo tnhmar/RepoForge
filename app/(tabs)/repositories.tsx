@@ -1,1 +1,2 @@
-export { RepositoryListScreen as default } from '../../src/ux/RepositoryList';
+import { Redirect } from 'expo-router';
+export default function RepositoryEntry() { return <Redirect href='/' />; }

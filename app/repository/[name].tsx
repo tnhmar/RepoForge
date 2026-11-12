@@ -1,1 +1,1 @@
-export { RepositoryWorkspaceScreen as default } from '../../src/screens/RepositoryWorkspace';
+export { RepositoryRedirect as default } from '../../src/v3/RepositoryRedirect';

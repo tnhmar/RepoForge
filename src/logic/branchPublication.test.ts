@@ -1,0 +1,5 @@
+import { expect, test } from '@jest/globals';
+import { assertReferenceReply, referenceInput, ReferenceRejected } from './branchPublication';
+test('existing branch updates require the exact reviewed head and forbid force', () => { const input = referenceInput('repo-node', 'release/mobile', 'a'.repeat(40), 'b'.repeat(40)); expect(input.refUpdates).toEqual([{ name: 'refs/heads/release/mobile', beforeOid: 'a'.repeat(40), afterOid: 'b'.repeat(40), force: false }]); });
+test('never treats a zero before OID as an existing branch', () => { expect(() => referenceInput('repo', 'main', '0'.repeat(40), 'b'.repeat(40))).toThrow(); });
+test('requires the mutation acknowledgement and preserves unknown outcomes', () => { expect(() => assertReferenceReply({ data: { updateRefs: { clientMutationId: 'commit' } } }, 'commit')).not.toThrow(); expect(() => assertReferenceReply({}, 'commit')).toThrow('UNKNOWN_PUBLICATION'); expect(() => assertReferenceReply({ data: { updateRefs: null }, errors: [{ type: 'FORBIDDEN', message: 'Protected branch' }] }, 'commit')).toThrow(ReferenceRejected); });

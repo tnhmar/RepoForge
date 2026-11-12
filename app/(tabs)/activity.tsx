@@ -1,1 +1,1 @@
-export { ActivityScreen as default } from '../../src/screens/Activity';
+export { HistoryScreen as default } from '../../src/v3/History';

@@ -1,11 +1,7 @@
-import { Tabs } from 'expo-router';
-export default function MainRoutes() {
-  return <Tabs screenOptions={{ headerShown: false, tabBarStyle: { display: 'none' } }}>
-    <Tabs.Screen name='index' />
-    <Tabs.Screen name='repositories' />
-    <Tabs.Screen name='activity' />
-    <Tabs.Screen name='workbench' />
-    <Tabs.Screen name='settings' />
-    <Tabs.Screen name='import' options={{ href: null }} />
-  </Tabs>;
-}
+import { Tabs, usePathname } from 'expo-router';
+import { Alert } from 'react-native';
+import { useTheme } from 'react-native-paper';
+import { Icon } from '../../src/components/ui';
+import { useCreation } from '../../src/creation/runner';
+import { useTransfer } from '../../src/v3/shared';
+export default function LaunchTabs() { const theme = useTheme(); const path = usePathname(); const guard = (event: { preventDefault: () => void }) => { if (useTransfer.getState().controller || useCreation.getState().busy) { event.preventDefault(); Alert.alert('An operation is in progress', 'Use the current screen to finish or request cancellation.'); } }; return <Tabs screenOptions={{ headerShown: false, tabBarHideOnKeyboard: true, tabBarActiveTintColor: theme.colors.primary, tabBarInactiveTintColor: theme.colors.onSurfaceVariant, tabBarStyle: { display: ['/', '/activity', '/repositories'].includes(path) ? 'flex' : 'none', backgroundColor: theme.colors.surface, borderTopColor: theme.colors.outlineVariant } }}><Tabs.Screen name='index' listeners={{ tabPress: guard }} options={{ title: 'Home', tabBarIcon: ({ color }) => <Icon name='home' color={color} /> }} /><Tabs.Screen name='activity' listeners={{ tabPress: guard }} options={{ title: 'Uploads', tabBarIcon: ({ color }) => <Icon name='upload' color={color} /> }} /><Tabs.Screen name='repositories' options={{ href: null }} /><Tabs.Screen name='import' options={{ href: null }} /><Tabs.Screen name='account' options={{ href: null }} /><Tabs.Screen name='settings' options={{ href: null }} /><Tabs.Screen name='work' options={{ href: null }} /><Tabs.Screen name='workbench' options={{ href: null }} /></Tabs>; }
